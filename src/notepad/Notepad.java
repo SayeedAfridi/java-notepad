@@ -1,6 +1,7 @@
 package notepad;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
@@ -16,10 +17,19 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.AbstractAction;
+import javax.swing.Action;
 import javax.swing.ImageIcon;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JColorChooser;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.KeyStroke;
+import javax.swing.event.UndoableEditEvent;
+import javax.swing.event.UndoableEditListener;
+import javax.swing.undo.CannotRedoException;
+import javax.swing.undo.CannotUndoException;
+import javax.swing.undo.UndoManager;
 
 /**
  *
@@ -29,13 +39,16 @@ public class Notepad extends JFrame {
 
     JTextArea mainarea;
     JMenuBar mbar;
-    JMenu mnFile, mnEdit, mnFormat, mnHelp;
+    JMenu mnFile, mnEdit, mnFormat;
     JMenuItem itmNew, itmOpen, itmSave, itmSaveAs, 
-            itmExit, itmCut, itmCopy, itmPaste;
+            itmExit, itmCut, itmCopy, itmPaste, itmTextColor;
+    JCheckBoxMenuItem wordWrap;
     JFileChooser jc;
     String filename = null;
     String fileContent = null;
-
+    UndoManager undo;
+    UndoAction undoAction;
+    RedoAction redoAction;
     public Notepad() {
         initComponent();
         itmSave.addActionListener(new ActionListener() {
@@ -62,10 +75,57 @@ public class Notepad extends JFrame {
                 openNew();
             }
         });
+        itmCut.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                mainarea.cut();
+            }
+        });
+        itmCopy.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                mainarea.copy();
+            }
+        });
+        itmPaste.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                mainarea.paste();
+            }
+        });
         itmExit.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 System.exit(0);
+            }
+        });
+        itmTextColor.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                Color c = JColorChooser.showDialog(rootPane, "Choose Text Color", Color.BLACK);
+                mainarea.setForeground(c);
+            }
+        });
+        
+        wordWrap.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if(wordWrap.isSelected()){
+                    mainarea.setLineWrap(true);
+                    mainarea.setWrapStyleWord(true);
+                }else{
+                    mainarea.setLineWrap(false);
+                    mainarea.setWrapStyleWord(false);
+                }
+            }
+        });
+        mainarea.getDocument().addUndoableEditListener(new UndoableEditListener(){
+            
+            @Override
+            public void undoableEditHappened(UndoableEditEvent e){
+                undo.addEdit(e.getEdit());
+                undoAction.update();
+                redoAction.update();
             }
         });
     }
@@ -77,7 +137,11 @@ public class Notepad extends JFrame {
         getContentPane().add(new JScrollPane(mainarea), BorderLayout.CENTER);
         setTitle("Untitled document");
         setSize(800, 600);
-
+        undo = new UndoManager();
+        ImageIcon undoIcon = new ImageIcon(getClass().getResource("/img/undo.png"));
+        ImageIcon redoIcon = new ImageIcon(getClass().getResource("/img/redo.png"));
+        undoAction = new UndoAction(undoIcon);
+        redoAction = new RedoAction(redoIcon);
         //menu bar
         mbar = new JMenuBar();
 
@@ -85,7 +149,6 @@ public class Notepad extends JFrame {
         mnFile = new JMenu("File");
         mnFormat = new JMenu("Format");
         mnEdit = new JMenu("Edit");
-        mnHelp = new JMenu("Help");
 
         //add icon
         ImageIcon newIcon = new ImageIcon(getClass().getResource("/img/new.png"));
@@ -105,29 +168,40 @@ public class Notepad extends JFrame {
         itmCut = new JMenuItem("Cut", cutIcon);
         itmCopy = new JMenuItem("Copy", copyIcon);
         itmPaste = new JMenuItem("Paste", pasteIcon);
+        wordWrap = new JCheckBoxMenuItem("Word Wrap");
+        itmTextColor = new JMenuItem("Text Color");
 
+        //itmhelp = new JMenuItem('In');
         //add shortcut to menu item
         itmNew.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, ActionEvent.CTRL_MASK));
         itmOpen.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, ActionEvent.CTRL_MASK));
         itmSave.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, ActionEvent.CTRL_MASK));
         itmSaveAs.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, ActionEvent.ALT_MASK));
+        itmCopy.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C, ActionEvent.CTRL_MASK));
+        itmPaste.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_P, ActionEvent.CTRL_MASK));
+        itmCut.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_X, ActionEvent.CTRL_MASK));
 
         //add menu item
         mnFile.add(itmNew);
         mnFile.add(itmOpen);
         mnFile.add(itmSave);
         mnFile.add(itmSaveAs);
+        mnFile.addSeparator();
         mnFile.add(itmExit);
         
+        mnEdit.add(undoAction);
+        mnEdit.add(redoAction);
         mnEdit.add(itmCut);
         mnEdit.add(itmCopy);
         mnEdit.add(itmPaste);
+        
+        mnFormat.add(wordWrap);
+        mnFormat.add(itmTextColor);
 
         //add menu to menu bar
         mbar.add(mnFile);
         mbar.add(mnEdit);
         mbar.add(mnFormat);
-        mbar.add(mnHelp);
 
         //add menu bar to frame
         setJMenuBar(mbar);
@@ -265,6 +339,58 @@ public class Notepad extends JFrame {
         fileContent = null;
     }
 
+    class UndoAction extends AbstractAction{
+        public UndoAction(ImageIcon undoIcon){
+            super("Undo", undoIcon);
+            setEnabled(false);
+        }
+        @Override
+        public void actionPerformed(ActionEvent e){
+            try {
+                undo.undo();
+            } catch (CannotUndoException ex) {
+                ex.printStackTrace();
+            }
+            update();
+            redoAction.update();
+        }
+
+        protected void update() {
+            if(undo.canUndo()){
+                setEnabled(true);
+                putValue(Action.NAME, "Undo");
+            }else{
+                setEnabled(false);
+                putValue(Action.NAME, "Undo");
+            }
+        }
+    }
+    class RedoAction extends AbstractAction{
+        public RedoAction(ImageIcon redoIcon){
+            super("Redo", redoIcon);
+            setEnabled(false);
+        }
+        @Override
+        public void actionPerformed(ActionEvent e){
+            try {
+                undo.redo();
+            } catch (CannotRedoException ex) {
+                ex.printStackTrace();
+            }
+            update();
+            undoAction.update();
+        }
+
+        protected void update() {
+            if(undo.canRedo()){
+                setEnabled(true);
+                putValue(Action.NAME, "Redo");
+            }else{
+                setEnabled(false);
+                putValue(Action.NAME, "Redo");
+            }
+        }
+    }
     public static void main(String[] args) {
         Notepad notepad = new Notepad();
     }
